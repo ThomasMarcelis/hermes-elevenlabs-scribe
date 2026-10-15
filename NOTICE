@@ -1,0 +1,11 @@
+This project contains code adapted from Hermes Agent:
+https://github.com/NousResearch/hermes-agent
+Copyright (c) 2025 Nous Research. Licensed under the MIT License.
+
+The REST response normalization and request/error conventions derive from Hermes
+v0.22.2 (d923a5eb48). The Scribe keyterm/form controls derive from an MIT-licensed
+owned Hermes extension. Extraction, native provider registration, migration,
+and independent offline tests are distributed under the same MIT License.
+
+ElevenLabs and Hermes are names of their respective products. This independent
+integration claims no sponsorship or endorsement.
