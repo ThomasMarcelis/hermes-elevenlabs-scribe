@@ -28,7 +28,11 @@ Hermes's native directory layout is also supported: place this repository at
 `/srv/hermes-profile/plugins/elevenlabs-scribe` (with the manifest and registration
 module at that directory's root), prepare declared dependencies through Hermes
 PM, and add `elevenlabs-scribe` to `plugins.enabled` for that profile. The offline
-integration tests exercise this installed-directory discovery path.
+integration tests exercise this installed-directory discovery path. Acceptance
+also exercised the native local-Git installer, security scan, real PM dependency
+admission, and synthetic HTTP dispatch in the selected private environment.
+Provisioning may need network access for Hermes's own pinned dependencies even
+when plugin tests themselves run entirely offline.
 
 Dependencies are declared in the native manifest, with upper bounds:
 `requests>=2.33.0,<3`, `PyYAML>=6.0.3,<7`, and `ruamel.yaml>=0.18.16,<0.20`.
