@@ -23,12 +23,13 @@ plugin execution and other operating systems have not been exercised.
 ## Install in each intended profile
 
 Use your installed Hermes launcher (`command -v hermes`), not an assumed virtualenv
-layout. Replace the launcher path; use `v0.1.0` or its reviewed full commit hash:
+layout. Replace the launcher path. `--ref` requires a full 40-character commit SHA,
+not a tag; the pin below is the reviewed `v0.1.0` commit:
 
 ```bash
 HERMES_CLI=/opt/hermes-bin/hermes
 SCRIBE_SOURCE=https://github.com/ThomasMarcelis/hermes-elevenlabs-scribe
-SCRIBE_REF=v0.1.0
+SCRIBE_REF=aa57a5d015a6a874753955bc31d7c2a1c2b88796
 "$HERMES_CLI" -p work plugins install "$SCRIBE_SOURCE" --ref "$SCRIBE_REF" --yes-deps --enable
 ```
 
