@@ -11,10 +11,10 @@ Hermes `>=0.22.2,<0.23` with the public `TranscriptionProvider.max_upload_bytes`
 `hermes_cli.auth.is_source_suppressed` helper. **Vanilla v0.22.2 is unsupported.**
 Registration and migration refuse missing capabilities; version alone is insufficient.
 
-**Publication dependency:** the compatible host integration is not yet publicly
-referenced. The publisher must supply its public repository URL and pinned commit
-before this plugin is usable from a public release. The approved plugin repository
-is `ThomasMarcelis/hermes-elevenlabs-scribe`; it is not yet published.
+Use [the paired host](https://github.com/ThomasMarcelis/hermes-agent/tree/0d7c749cff42cd4791e0342da226c6d499de5aeb) at commit
+`0d7c749cff42cd4791e0342da226c6d499de5aeb` (`jd/thin-v0.22.2`).
+The fork retains an operator-provisioned SQLite 3.53.4 runtime pin; provision
+that host runtime first. Plugin source: [ThomasMarcelis/hermes-elevenlabs-scribe](https://github.com/ThomasMarcelis/hermes-elevenlabs-scribe).
 
 An ElevenLabs key is required. ffmpeg enables Hermes's best-effort trimming and
 large-file conversion/chunking. Tested on Linux with Python 3.14; host-isolated
@@ -23,17 +23,16 @@ plugin execution and other operating systems have not been exercised.
 ## Install in each intended profile
 
 Use your installed Hermes launcher (`command -v hermes`), not an assumed virtualenv
-layout. Replace these example absolute paths and the SHA with your reviewed versions:
+layout. Replace the launcher path; use `v0.1.0` or its reviewed full commit hash:
 
 ```bash
 HERMES_CLI=/opt/hermes-bin/hermes
-SCRIBE_SOURCE=/opt/hermes-elevenlabs-scribe
-SCRIBE_REF=FULL_REVIEWED_COMMIT_SHA
-"$HERMES_CLI" -p work plugins install "file://$SCRIBE_SOURCE" --ref "$SCRIBE_REF" --yes-deps --enable
+SCRIBE_SOURCE=https://github.com/ThomasMarcelis/hermes-elevenlabs-scribe
+SCRIBE_REF=v0.1.0
+"$HERMES_CLI" -p work plugins install "$SCRIBE_SOURCE" --ref "$SCRIBE_REF" --yes-deps --enable
 ```
 
-The local Git installer clones committed code only; local/unreviewed-source warnings
-are expected. Hermes PM prepares bounded dependencies (`requests`, `PyYAML`,
+The Git installer records the selected commit. Hermes PM prepares bounded dependencies (`requests`, `PyYAML`,
 `ruamel.yaml`); provisioning may need network access. Do not use raw pip in the host.
 
 Set `ELEVENLABS_API_KEY` in the intended profile's `.env`, or reuse its `elevenlabs`
