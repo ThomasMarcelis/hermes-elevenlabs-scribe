@@ -6,7 +6,8 @@ It retains the owned Scribe controls without replacing Hermes's built-in
 `ctx.register_transcription_provider()`; audio uses normal `transcribe_audio()`
 dispatch. It does not patch Hermes modules or register model tools.
 
-Tested with Hermes **v0.22.2**, Python 3.14, on Linux. The manifest restricts
+Tested with the **prepared Hermes v0.22.2 fork plus the public transcription
+audio-policy API**, Python 3.14, on Linux. Vanilla v0.22.2 is unsupported. The manifest restricts
 compatibility to `>=0.22.2,<0.23`; revalidate before widening it. This is a
 file-transcription provider, not a streaming provider. It is independent of
 and not endorsed by ElevenLabs or Nous Research.
@@ -126,24 +127,25 @@ the retained old stanza supports rollback to the former owned core build.
 
 ### Host compatibility caveats
 
-- Hermes v0.22.2 applies its **25 MiB** plugin upload cap. Larger inputs go through
-  core re-encoding/chunking, and fail if they cannot be made to fit. The built-in
-  ElevenLabs route has a vendor-specific cap just below 5 GiB. Large-file
-  behavior is consequently different and needs acceptance before migration.
-- Hermes skips its built-in cloud silence trimming for plugin providers. Original
-  audio reaches this plugin unless the generic preprocessing/chunking path needs
-  a conversion. The cloud trim settings remain in configuration for other
-  providers. This can change uploaded duration, cost, and pause handling.
+- The host must expose `TranscriptionProvider.max_upload_bytes` and
+  `TranscriptionProvider.cloud_preprocessing`. Scribe opts into **5 GiB minus one
+  byte** (5,368,709,119 bytes) and the host's original cloud silence trimming.
+  `stt.cloud_trim_silence: false` still disables trimming; all existing tuning
+  settings and best-effort ffmpeg fallbacks remain in effect. Conversion precedes
+  trimming, then upload checks, hint hooks, and any re-encoding/chunking. Request
+  temporary files are cleaned up; source files remain intact.
+- Version bounds alone do not establish capability support. Registration and both
+  migration modes refuse vanilla v0.22.2 or any host missing the public properties,
+  before registering a provider or writing a candidate. Run migration with the
+  **target host's interpreter** after upgrading its API. There is no reduced-parity
+  fallback. Keep `>=0.22.2,<0.23` until a newer host is tested.
 - Explicit selection is required; automatic provider detection continues to
   select the built-in. A command provider with the same name takes precedence.
 - Missing credentials use Hermes's standard plugin-unavailable error at dispatch;
   a direct provider call retains `ELEVENLABS_API_KEY not set`.
-- One compatibility exception is retained: the non-underscored
-  `hermes_cli.auth.is_source_suppressed` helper preserves the built-in credential
-  suppression behavior. Hermes's admission lint flags it as outside the documented
-  plugin API. No private transcription implementation is imported, and there is
-  no runtime rebinding. Keep the version bound and revalidate this helper during
-  upgrades; a documented credential-suppression API would remove this exception.
+- The fork documents `hermes_cli.auth.is_source_suppressed` as a public, profile-scoped
+  read-only helper. It is used alongside scoped secret resolution to preserve
+  suppression; no private core API import or runtime rebinding is needed.
 
 ## Offline verification
 
@@ -155,13 +157,15 @@ Hermes source checkout so source imports outrank an unrelated editable install:
 ```bash
 cd /opt/hermes
 SCRIBE_TEST_HOME=$(mktemp -d /var/tmp/scribe-test-home.XXXXXX)
-env HOME="$SCRIBE_TEST_HOME" HERMES_HOME="$SCRIBE_TEST_HOME/profile" HERMES_PYTHON=/opt/hermes-test/bin/python bash /opt/hermes/scripts/run_tests.sh /opt/hermes-elevenlabs-scribe/tests --file-retries 0
+env PYTHONPATH=/opt/hermes HOME="$SCRIBE_TEST_HOME" HERMES_HOME="$SCRIBE_TEST_HOME/profile" HERMES_PYTHON=/opt/hermes-test/bin/python bash /opt/hermes/scripts/run_tests.sh /opt/hermes-elevenlabs-scribe/tests --file-retries 0
 ```
 
 The tests use synthetic WAV audio, synthetic keys, and a loopback HTTP server.
 They assert real installed discovery, exact repeated multipart wire fields and
 query parameters, model gates, validation limits, migration, credential scopes,
-response errors, timeout handling, and unchanged built-in dispatch. They never
+response errors, timeout handling, original cap and trim opt-ins, and unchanged
+built-in dispatch. Host tests additionally exercise small synthetic cap boundaries
+and full conversion/trim/hook/chunk/upload ordering. They never
 call a model or an external transcription service. Network-restricted runners
 must allow loopback sockets (a private network namespace is suitable).
 

@@ -28,6 +28,14 @@ class ScribeProvider(TranscriptionProvider):
         return NAME
 
     @property
+    def max_upload_bytes(self) -> int:
+        return 5 * 1024 * 1024 * 1024 - 1
+
+    @property
+    def cloud_preprocessing(self) -> bool:
+        return True
+
+    @property
     def display_name(self) -> str:
         return "ElevenLabs Scribe (extended controls)"
 

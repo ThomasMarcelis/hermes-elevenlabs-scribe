@@ -9,16 +9,21 @@ from pathlib import Path
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+if __package__:
+    from .host_api import require_host_capabilities
+else:
+    from host_api import require_host_capabilities
+
 NAME = "elevenlabs-scribe"
 CAVEATS = (
-    "Hermes 0.22.2 plugin dispatch uses a 25 MiB upload cap (larger audio is re-encoded/split).",
-    "Hermes skips built-in cloud silence trimming for plugin providers.",
+    "Required host audio-policy capabilities verified; original upload cap and cloud trim are preserved.",
     "Keep ELEVENLABS_API_KEY / ElevenLabs credential pools in the same profile.",
 )
 
 
 def migrated_config(original: dict) -> dict:
     """Copy all settings, keeping the original stanza for explicit rollback."""
+    require_host_capabilities()
     if not isinstance(original, dict):
         raise ValueError("Configuration must be a YAML mapping")
     result = deepcopy(original)

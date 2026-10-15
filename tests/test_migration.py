@@ -10,8 +10,10 @@ import pytest
 import yaml
 from conftest import NAME, PLUGIN, fields
 
-spec = importlib.util.spec_from_file_location("scribe_migrate", PLUGIN / "migrate.py")
+spec = importlib.util.spec_from_file_location("scribe_migrate", PLUGIN / "migrate.py",
+                                              submodule_search_locations=[str(PLUGIN)])
 migration = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = migration
 spec.loader.exec_module(migration)
 
 
@@ -61,11 +63,12 @@ def test_cli_dry_run_and_new_candidate_keep_input_comments_and_permissions(tmp_p
     before = source.read_bytes()
     home = tmp_path / "home"
     home.mkdir()
-    env = {**os.environ, "HOME": str(home), "HERMES_HOME": str(home / ".hermes")}
+    env = {**os.environ, "HOME": str(home), "HERMES_HOME": str(home / ".hermes"),
+           "PYTHONPATH": str(__import__("pathlib").Path.cwd())}
     cmd = [sys.executable, str(PLUGIN / "migrate.py"), "--config", str(source)]
     dry = subprocess.run([*cmd, "--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0, dry.stderr
-    assert "Dry run" in dry.stdout and "25 MiB" in dry.stdout
+    assert "Dry run" in dry.stdout and "capabilities verified" in dry.stdout
     assert "Quartz" not in dry.stdout
     candidate = tmp_path / "candidate.yaml"
     written = subprocess.run([*cmd, "--output", str(candidate)], env=env, capture_output=True, text=True)
