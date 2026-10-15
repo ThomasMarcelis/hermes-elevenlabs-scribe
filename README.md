@@ -1,176 +1,163 @@
 # Hermes ElevenLabs Scribe
 
-A standalone native Hermes transcription provider named **`elevenlabs-scribe`**.
-It retains the owned Scribe controls without replacing Hermes's built-in
-`elevenlabs` provider. Registration uses `TranscriptionProvider` and
-`ctx.register_transcription_provider()`; audio uses normal `transcribe_audio()`
-dispatch. It does not patch Hermes modules or register model tools.
+Native file transcription under **`elevenlabs-scribe`**, with Scribe v2 keyterms,
+file-backed vocabulary, `no_verbatim` and logging controls. Uses normal Hermes
+plugin dispatch; the built-in `elevenlabs` provider remains unchanged.
 
-Tested with the **prepared Hermes v0.22.2 fork plus the public transcription
-audio-policy API**, Python 3.14, on Linux. Vanilla v0.22.2 is unsupported. The manifest restricts
-compatibility to `>=0.22.2,<0.23`; revalidate before widening it. This is a
-file-transcription provider, not a streaming provider. It is independent of
-and not endorsed by ElevenLabs or Nous Research.
+## Requirements
 
-## Installation
+Hermes `>=0.22.2,<0.23` with the public `TranscriptionProvider.max_upload_bytes`,
+`cloud_preprocessing`, and `language_config_aliases` capabilities and the public
+`hermes_cli.auth.is_source_suppressed` helper. **Vanilla v0.22.2 is unsupported.**
+Registration and migration refuse missing capabilities; version alone is insufficient.
 
-Use the same profile and PM-managed Hermes interpreter as your agent. The
-following absolute paths are generic examples: replace `/opt/hermes` with your
-Hermes checkout/runtime and `/opt/hermes-elevenlabs-scribe` with this repository.
-No hosted repository or catalog entry is assumed.
+**Publication dependency:** the compatible host integration is not yet publicly
+referenced. The publisher must supply its public repository URL and pinned commit
+before this plugin is usable from a public release. The approved plugin repository
+is `ThomasMarcelis/hermes-elevenlabs-scribe`; it is not yet published.
+
+An ElevenLabs key is required. ffmpeg enables Hermes's best-effort trimming and
+large-file conversion/chunking. Tested on Linux with Python 3.14; host-isolated
+plugin execution and other operating systems have not been exercised.
+
+## Install in each intended profile
+
+Use your installed Hermes launcher (`command -v hermes`), not an assumed virtualenv
+layout. Replace these example absolute paths and the SHA with your reviewed versions:
 
 ```bash
-/opt/hermes/.venv/bin/hermes plugins validate /opt/hermes-elevenlabs-scribe
-/opt/hermes/.venv/bin/hermes plugins install file:///opt/hermes-elevenlabs-scribe --yes-deps --enable
+HERMES_CLI=/opt/hermes-bin/hermes
+SCRIBE_SOURCE=/opt/hermes-elevenlabs-scribe
+SCRIBE_REF=FULL_REVIEWED_COMMIT_SHA
+"$HERMES_CLI" -p work plugins install "file://$SCRIBE_SOURCE" --ref "$SCRIBE_REF" --yes-deps --enable
 ```
 
-Hermes's native directory layout is also supported: place this repository at
-`/srv/hermes-profile/plugins/elevenlabs-scribe` (with the manifest and registration
-module at that directory's root), prepare declared dependencies through Hermes
-PM, and add `elevenlabs-scribe` to `plugins.enabled` for that profile. The offline
-integration tests exercise this installed-directory discovery path. Acceptance
-also exercised the native local-Git installer, security scan, real PM dependency
-admission, and synthetic HTTP dispatch in the selected private environment.
-Provisioning may need network access for Hermes's own pinned dependencies even
-when plugin tests themselves run entirely offline.
+The local Git installer clones committed code only; local/unreviewed-source warnings
+are expected. Hermes PM prepares bounded dependencies (`requests`, `PyYAML`,
+`ruamel.yaml`); provisioning may need network access. Do not use raw pip in the host.
 
-Dependencies are declared in the native manifest, with upper bounds:
-`requests>=2.33.0,<3`, `PyYAML>=6.0.3,<7`, and `ruamel.yaml>=0.18.16,<0.20`.
-Do not install them into a shared Hermes environment with raw pip. No ElevenLabs
-SDK, model download, or model inference is required to install or test.
+Set `ELEVENLABS_API_KEY` in the intended profile's `.env`, or reuse its `elevenlabs`
+or `custom:elevenlabs` credential pool. Never put keys in this repository. Each
+request resolves credentials anew. Multi-profile gateways use the requesting secret
+scope only; an absent scope or key cannot borrow process credentials or pool keys.
+A suppressed environment credential stays suppressed; a separate pool entry may
+still be used outside multiplex mode.
 
-Set `ELEVENLABS_API_KEY` through Hermes's credential setup in the target profile.
-Existing profile dotenv credentials and `elevenlabs` / `custom:elevenlabs`
-credential pools remain usable; credentials are resolved per call, not captured
-at registration. Multiplexed scopes are authoritative, including an absent key.
-Environment credentials suppressed by Hermes authentication remain suppressed.
+## Configure
+
+Merge this into the intended profile's configuration; `--enable` already enables the
+plugin. No optional vocabulary file is needed:
 
 ```yaml
-plugins:
-  enabled: [elevenlabs-scribe]  # append to any existing list
 stt:
   provider: elevenlabs-scribe
   elevenlabs-scribe:
     model: scribe_v2
-    language: eng             # omit or leave empty to auto-detect
-    tag_audio_events: false
-    diarize: false
-    no_verbatim: false
-    keyterms: [Quartz, Example Labs]
-    keyterms_file: /srv/hermes-profile/vocabulary.yaml
-    max_keyterms: 95
-    enable_logging: false    # optional; omitted means provider default
 ```
 
-Keep secrets out of the configuration examples. `base_url` optionally replaces
-`https://api.elevenlabs.io/v1`; it receives the API key and audio, so choose a
-trusted endpoint. The legacy `ELEVENLABS_STT_BASE_URL` fallback remains supported.
-`timestamps_granularity`, `num_speakers`, and `file_format` are optional multipart
-controls. `enable_logging` is a query parameter and is never a multipart field;
-it controls the provider's logging, not Hermes's logs. This plugin adds no
-telemetry or local audio/transcript retention.
+| Option in `stt.elevenlabs-scribe` | Default / behavior |
+|---|---|
+| `model` | `model_id` alias, then `STT_ELEVENLABS_MODEL`, then `scribe_v2`; explicit dispatch/hook model wins |
+| `language` | `language_code` alias, then global `stt.language` (default `en`), then `HERMES_LOCAL_STT_LANGUAGE`; hook language wins |
+| `keyterms`, `keyterms_file` | Empty; inline list followed by an absolute YAML/TXT file, read on each request |
+| `max_keyterms` | 95; allowed range 1–1000 |
+| `no_verbatim` | Omitted unless configured; true requires `scribe_v2` |
+| `diarize`, `tag_audio_events` | false |
+| `num_speakers`, `timestamps_granularity`, `file_format` | Optional multipart fields |
+| `enable_logging` | Omitted; sent as a query parameter when configured |
+| `base_url` | `ELEVENLABS_STT_BASE_URL`, then `https://api.elevenlabs.io/v1`; receives audio and key |
 
-## Keyterms and model gates
+Omitting language **inherits English by default**, not auto-detection. For automatic
+language detection, leave both provider language keys empty/absent, set global
+`stt.language: ""`, and unset `HERMES_LOCAL_STT_LANGUAGE`.
 
-Inline terms are followed by file terms. Whitespace is stripped, empty terms
-are omitted, and duplicates are removed case-insensitively while preserving the
-first spelling and order. Each term is a separate multipart `keyterms` field.
-A YAML file accepts a list or a mapping with a `keyterms` list; a TXT file accepts
-one term per line and ignores blank lines and lines beginning with `#`.
-The file path must be absolute (home expansion remains supported); files are
-read afresh for each transcription. Missing, unreadable, or malformed files fail
-the request instead of dropping vocabulary hints.
+Keyterms require `scribe_v2`. Terms are stripped, deduplicated case-insensitively in
+first-seen order, and sent as repeated multipart fields. Each must be a string under
+50 characters, at most five words, without `[ ] { } < >` or backslash. YAML accepts a
+list or `keyterms` mapping; TXT accepts one term per line, ignoring blank/comment
+lines. Missing or invalid files and excess terms fail before upload. Prompts are
+unsupported; use keyterms.
 
-Terms must be strings, shorter than 50 characters, at most five words, and may
-not contain `[`, `]`, `{`, `}`, `<`, `>`, or `\`. The default cap is 95 unique
-terms; `max_keyterms` may be 1–1000. Exceeding the cap fails without uploading.
-`no_verbatim: true` and nonempty keyterms require `scribe_v2`. With `scribe_v1`,
-false `no_verbatim` and empty keyterms are omitted. Prompts are unsupported,
-as in the built-in Scribe backend; use keyterms for vocabulary hints.
+Audio and fields go to the configured endpoint. Hermes retains its original upload
+cap of **5 GiB minus one byte** and configurable cloud trimming
+(`stt.cloud_trim_silence: false` disables it); larger recordings are re-encoded or
+split. Requests use a 120-second timeout with no added retries. Empty transcripts
+retain `no_speech`; response errors redact the API key. This cap preserves host
+behavior, not a claim that the live API accepts every such file.
 
-A request has a 120-second Requests timeout and no added retries. Existing
-non-200 error details, empty-transcript `no_speech`, malformed JSON/text errors,
-and permission-error envelopes are preserved. The provider field is now
-`elevenlabs-scribe`. An echoed API key in an error is redacted before returning
-or logging it.
+[ElevenLabs documents](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)
+`enable_logging=false` as zero-retention mode, with log/transcript storage features
+unavailable, **enterprise customers only** (checked 2026-10-15). This setting controls
+the vendor request, not Hermes logs, sessions, source recordings or gateway storage.
+No live API or retention behavior is verified by the offline tests.
 
-## Migration from the owned built-in extension
+## Migrate safely from the extended built-in
 
-Do this before switching to a core build that restores upstream `elevenlabs`.
-The upstream built-in ignores the owned keyterm/no-verbatim/logging extensions.
-Installing this plugin alone does **not** select it. Do not keep
-`stt.provider: elevenlabs` if those controls are required.
+This provider has **no streaming or live partial transcripts**. Migration refuses
+`stt.streaming: true`. Keep the previous provider if streaming is required; disabling
+it is a separate deliberate decision. Desktop audio also changes from a possible
+direct vendor connection to **Desktop → Hermes gateway → ElevenLabs**. The helper
+requires `--accept-gateway-relay`; do not pass it unless that data path is intended.
 
-The helper defaults to a dry run and prints only the migration actions and
-compatibility caveats, not configuration values, keyterms, or credentials:
+1. Prepare the compatible new host and plugin alongside the existing installation.
+   Keep the running host/configuration unchanged. Copy the source configuration to
+   a private staging directory and preserve any `STT_ELEVENLABS_MODEL` environment
+   setting from the old process when invoking the helper.
+2. Use the **new host's PM-managed interpreter** with isolated HOME/HERMES_HOME.
+   These absolute example paths must point at your prepared artifacts:
 
 ```bash
-/opt/hermes/.venv/bin/python /opt/hermes-elevenlabs-scribe/migrate.py --config /srv/hermes-profile/config.yaml --dry-run
-/opt/hermes/.venv/bin/python /opt/hermes-elevenlabs-scribe/migrate.py --config /srv/hermes-profile/config.yaml --output /srv/hermes-profile/config.scribe-candidate.yaml
+SCRIBE_MIGRATION_HOME=$(mktemp -d /tmp/scribe-migration.XXXXXX)
+env HOME="$SCRIBE_MIGRATION_HOME" HERMES_HOME="$SCRIBE_MIGRATION_HOME/profile" PYTHONPATH=/opt/new-hermes /opt/new-hermes-runtime/bin/python /opt/hermes-elevenlabs-scribe/migrate.py --config /srv/migration-input/config.yaml --accept-gateway-relay --dry-run
+env HOME="$SCRIBE_MIGRATION_HOME" HERMES_HOME="$SCRIBE_MIGRATION_HOME/profile" PYTHONPATH=/opt/new-hermes /opt/new-hermes-runtime/bin/python /opt/hermes-elevenlabs-scribe/migrate.py --config /srv/migration-input/config.yaml --accept-gateway-relay --output /srv/migration-input/config.scribe-candidate.yaml
 ```
 
-It requires an explicitly selected `elevenlabs` provider, copies the entire
-`stt.elevenlabs` mapping to `stt.elevenlabs-scribe`, adds the plugin to the enabled
-list, and changes the provider name. Every keyterm, file path, cap,
-`no_verbatim`, logging flag, and other option is retained. `model_id` also becomes
-`model` (default `scribe_v2` if omitted); the effective provider `language` or
-`language_code` also becomes `language`. These aliases matter because Hermes's
-plugin dispatcher reads `model` and `language`, and a global language hint must
-not displace the old provider-specific `language_code`. For new configurations,
-use the canonical `model` and `language` keys shown above.
+3. Review the candidate against the source. It normalizes legacy `model_id` (which
+   wins over old `model`) and `language`/`language_code` (`language` wins) into active
+   canonical keys. It preserves vocabulary, options, global settings, comments and
+   the original `stt.elevenlabs` rollback stanza. No configuration values are printed.
+4. Back up the current configuration and old host/plugin versions. At an authorized
+   cutover between sessions, install/enable the pinned plugin in the target profile,
+   deploy the compatible host and reviewed candidate **together**, then start the next
+   session. Never run the restored built-in with extended controls during an interim
+   upgrade. The helper does not install, activate, replace live config or restart.
 
-The old stanza, unrelated configuration, YAML comments, and quoting remain.
-Candidates are created exclusively with mode 0600. The helper never overwrites
-an existing destination, follows a destination symlink, changes the source,
-installs the plugin, or activates/restarts a runtime. Existing destination
-stanzas, conflicting command-provider entries, disabled plugins, or malformed
-configuration require manual reconciliation. Review the candidate, prepare the
-plugin, then deploy the configuration through your normal controlled workflow
-for the next session. Rollback requires explicitly selecting `elevenlabs` again;
-the retained old stanza supports rollback to the former owned core build.
+Candidates are complete, exclusive 0600 files; existing files/symlinks are refused.
+Failed serialization/publication leaves no partial candidate. Destination stanzas,
+command conflicts or disabled plugins require reconciliation. Rollback restores the
+previous host and source configuration together: selecting `elevenlabs` on the new
+host alone does not restore the extended controls.
 
-### Host compatibility caveats
+## Troubleshooting
 
-- The host must expose `TranscriptionProvider.max_upload_bytes` and
-  `TranscriptionProvider.cloud_preprocessing`. Scribe opts into **5 GiB minus one
-  byte** (5,368,709,119 bytes) and the host's original cloud silence trimming.
-  `stt.cloud_trim_silence: false` still disables trimming; all existing tuning
-  settings and best-effort ffmpeg fallbacks remain in effect. Conversion precedes
-  trimming, then upload checks, hint hooks, and any re-encoding/chunking. Request
-  temporary files are cleaned up; source files remain intact.
-- Version bounds alone do not establish capability support. Registration and both
-  migration modes refuse vanilla v0.22.2 or any host missing the public properties,
-  before registering a provider or writing a candidate. Run migration with the
-  **target host's interpreter** after upgrading its API. There is no reduced-parity
-  fallback. Keep `>=0.22.2,<0.23` until a newer host is tested.
-- Explicit selection is required; automatic provider detection continues to
-  select the built-in. A command provider with the same name takes precedence.
-- Missing credentials use Hermes's standard plugin-unavailable error at dispatch;
-  a direct provider call retains `ELEVENLABS_API_KEY not set`.
-- The fork documents `hermes_cli.auth.is_source_suppressed` as a public, profile-scoped
-  read-only helper. It is used alongside scoped secret resolution to preserve
-  suppression; no private core API import or runtime rebinding is needed.
+| Symptom | Action |
+|---|---|
+| No provider registered / missing capabilities | Check host requirements and plugin enablement in this profile |
+| Plugin not available | Check this profile's key, scope and suppression settings |
+| Controls ignored | Explicitly select `elevenlabs-scribe`; auto-selection still uses built-ins |
+| Wrong handler | A same-name command entry in `stt.providers` takes precedence |
+| Scribe v2 required / keyterm file or limit error | Check model/hook settings and vocabulary |
 
-## Offline verification
+## Development
 
-Use Hermes's canonical runner with a prepared test interpreter. The example
-creates temporary HOME and HERMES_HOME, then the fixtures create a separate
-profile per test and copy the native plugin into that profile. Run from the
-Hermes source checkout so source imports outrank an unrelated editable install:
+Requirements: a compatible Hermes source checkout, an interpreter with **pytest and
+host/plugin dependencies**, **ffmpeg on PATH**, and **loopback sockets**. Set
+`HERMES_SOURCE`, `SCRIBE_SOURCE`, and `HERMES_TEST_PYTHON` to their absolute paths.
+Run this exact block from any directory; it uses synthetic audio/keys and only loopback
+HTTP, including real installed-directory discovery and multipart assertions:
 
 ```bash
-cd /opt/hermes
-SCRIBE_TEST_HOME=$(mktemp -d /var/tmp/scribe-test-home.XXXXXX)
-env PYTHONPATH=/opt/hermes HOME="$SCRIBE_TEST_HOME" HERMES_HOME="$SCRIBE_TEST_HOME/profile" HERMES_PYTHON=/opt/hermes-test/bin/python bash /opt/hermes/scripts/run_tests.sh /opt/hermes-elevenlabs-scribe/tests --file-retries 0
+: "${HERMES_SOURCE:?Set the absolute compatible Hermes checkout path}"
+: "${SCRIBE_SOURCE:?Set the absolute plugin checkout path}"
+: "${HERMES_TEST_PYTHON:?Set the absolute prepared test interpreter path}"
+SCRIBE_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/scribe-tests.XXXXXX")
+mkdir -p "$SCRIBE_TEST_ROOT/home" "$SCRIBE_TEST_ROOT/profile"
+env HOME="$SCRIBE_TEST_ROOT/home" HERMES_HOME="$SCRIBE_TEST_ROOT/profile" HERMES_PYTHON="$HERMES_TEST_PYTHON" bash "$HERMES_SOURCE/scripts/run_tests.sh" "$SCRIBE_SOURCE/tests" --file-retries 0 -- --hermes-source "$HERMES_SOURCE"
 ```
 
-The tests use synthetic WAV audio, synthetic keys, and a loopback HTTP server.
-They assert real installed discovery, exact repeated multipart wire fields and
-query parameters, model gates, validation limits, migration, credential scopes,
-response errors, timeout handling, original cap and trim opt-ins, and unchanged
-built-in dispatch. Host tests additionally exercise small synthetic cap boundaries
-and full conversion/trim/hook/chunk/upload ordering. They never
-call a model or an external transcription service. Network-restricted runners
-must allow loopback sockets (a private network namespace is suitable).
+The canonical runner sanitizes environment variables, including PYTHONPATH and
+HERMES_HOME; temporary HOME prevents live-profile access and each fixture binds its
+own profile. `--hermes-source` explicitly selects and asserts core import origins.
+For native admission, run `"$HERMES_CLI" plugins validate "$SCRIBE_SOURCE"`.
 
-MIT licensed. See the repository's license and attribution notice.
+MIT licensed; see LICENSE and NOTICE for upstream and extension attribution.

@@ -12,7 +12,7 @@ def api_key() -> str:
         key = (get_secret("ELEVENLABS_API_KEY", "") or "").strip()
         if key:
             return key
-    # Match the built-in voice resolver: a multiplex scope is authoritative,
+    # Deliberately stricter than the built-in raw-env fallback: a multiplex scope is authoritative,
     # including a miss. Never fall back to a pool or another profile's dotenv.
     if is_multiplex_active():
         return ""
@@ -20,11 +20,15 @@ def api_key() -> str:
         key = (get_env_value("ELEVENLABS_API_KEY") or "").strip()
         if key:
             return key
-    for name in ("elevenlabs", "custom:elevenlabs"):
-        pool = load_pool(name)
-        entry = pool.peek() if pool.has_credentials() else None
-        key = str(getattr(entry, "runtime_api_key", "")
-                  or getattr(entry, "access_token", "") or "").strip()
-        if key:
-            return key
+    try:
+        for name in ("elevenlabs", "custom:elevenlabs"):
+            pool = load_pool(name)
+            entry = pool.peek() if pool.has_credentials() else None
+            key = str(getattr(entry, "runtime_api_key", "")
+                      or getattr(entry, "access_token", "") or "").strip()
+            if key:
+                return key
+    except Exception:
+        # Pool failures may contain sensitive store contents. Fail closed without echoing them.
+        return ""
     return ""

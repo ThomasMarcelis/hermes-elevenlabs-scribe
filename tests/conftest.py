@@ -19,6 +19,24 @@ PLUGIN = Path(__file__).resolve().parents[1]
 NAME = "elevenlabs-scribe"
 
 
+def pytest_addoption(parser):
+    parser.addoption("--hermes-source", help="Absolute Hermes source checkout or installed package root")
+
+
+def pytest_configure(config):
+    root = Path(config.getoption("--hermes-source") or Path.cwd()).resolve()
+    if not (root / "agent/transcription_provider.py").is_file():
+        raise pytest.UsageError("Pass --hermes-source with the absolute Hermes source/package root")
+    sys.path.insert(0, str(root))
+    config._scribe_hermes_source = root
+
+
+@pytest.fixture(scope="session")
+def hermes_source(pytestconfig):
+    return pytestconfig._scribe_hermes_source
+
+
+
 @pytest.fixture
 def stub(monkeypatch):
     calls = []
@@ -66,7 +84,7 @@ def stub(monkeypatch):
 
 
 @pytest.fixture
-def installed(tmp_path, monkeypatch, stub):
+def installed(tmp_path, monkeypatch, stub, hermes_source):
     home = tmp_path / "home"
     home.mkdir()
     profile = tmp_path / "profile"
@@ -87,7 +105,7 @@ def installed(tmp_path, monkeypatch, stub):
 
     # Check the interpreter's editable install has not selected a sibling checkout.
     for module in (plugins, transcription_registry, sys.modules[transcribe_audio.__module__]):
-        assert Path(module.__file__).is_relative_to(Path.cwd()), module.__file__
+        assert Path(module.__file__).resolve().is_relative_to(hermes_source), module.__file__
     plugins._reset_plugin_managers_for_tests()
     cfg = {"plugins": {"enabled": [NAME]}, "stt": {"provider": NAME,
            "cloud_trim_silence": False, NAME: {"base_url": stub.url, "model": "scribe_v2"}}}

@@ -28,6 +28,13 @@ class ScribeProvider(TranscriptionProvider):
         return NAME
 
     @property
+    def language_config_aliases(self) -> tuple[str, ...]:
+        return ("language_code",)
+
+    def default_model(self) -> str:
+        return get_env_value("STT_ELEVENLABS_MODEL") or "scribe_v2"
+
+    @property
     def max_upload_bytes(self) -> int:
         return 5 * 1024 * 1024 * 1024 - 1
 
@@ -66,16 +73,13 @@ class ScribeProvider(TranscriptionProvider):
             cfg = stt.get(NAME) or {}
             if not isinstance(cfg, dict):
                 raise ValueError(f"stt.{NAME} must be a mapping")
-            model_name = model or cfg.get("model") or self.default_model()
+            model_name = model or cfg.get("model") or cfg.get("model_id") or self.default_model()
             if not isinstance(model_name, str):
                 raise ValueError("ElevenLabs model must be a string")
             data = build_form(model_name, cfg)
-            if language:
-                data = [item for item in data if item[0] != "language_code"]
-                data.append(("language_code", language))
-            elif cfg.get("language"):
-                data = [item for item in data if item[0] != "language_code"]
-                data.append(("language_code", cfg["language"]))
+            effective_language = language or cfg.get("language") or cfg.get("language_code")
+            if effective_language:
+                data.append(("language_code", effective_language))
             base_url = str(cfg.get("base_url") or get_env_value("ELEVENLABS_STT_BASE_URL")
                            or BASE_URL).strip().rstrip("/")
             options = {}

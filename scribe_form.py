@@ -1,4 +1,4 @@
-"""Scribe multipart controls, extracted from the owned Hermes extension (MIT)."""
+"""Scribe multipart form: model gates, keyterms and optional fields (MIT; see NOTICE)."""
 
 from pathlib import Path
 from typing import Any
@@ -76,10 +76,7 @@ def load_keyterms(elevenlabs_config: dict[str, Any]) -> list[str]:
             raise ValueError("ElevenLabs keyterms_file does not exist")
 
         if keyterms_path.suffix.lower() in {".yaml", ".yml"}:
-            try:
-                import yaml
-            except ImportError as exc:  # pragma: no cover - core dependency
-                raise ValueError("YAML keyterms_file requires PyYAML") from exc
+            import yaml
             loaded = yaml.safe_load(keyterms_path.read_text(encoding="utf-8"))
             if loaded is None:
                 file_terms: Any = []
@@ -125,7 +122,7 @@ def build_form(
             else "false",
         ),
     ]
-    for name in ("language_code", "timestamps_granularity", "file_format"):
+    for name in ("timestamps_granularity", "file_format"):
         value = elevenlabs_config.get(name)
         if value not in (None, ""):
             form.append((name, str(value)))

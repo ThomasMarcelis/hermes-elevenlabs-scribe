@@ -5,23 +5,22 @@ import argparse
 import os
 from copy import deepcopy
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 if __package__:
     from .host_api import require_host_capabilities
+    from .scribe_form import truthy
 else:
     from host_api import require_host_capabilities
+    from scribe_form import truthy
 
 NAME = "elevenlabs-scribe"
-CAVEATS = (
-    "Required host audio-policy capabilities verified; original upload cap and cloud trim are preserved.",
-    "Keep ELEVENLABS_API_KEY / ElevenLabs credential pools in the same profile.",
-)
 
 
-def migrated_config(original: dict) -> dict:
+def migrated_config(original: dict, *, accept_gateway_relay: bool = False) -> dict:
     """Copy all settings, keeping the original stanza for explicit rollback."""
     require_host_capabilities()
     if not isinstance(original, dict):
@@ -30,6 +29,13 @@ def migrated_config(original: dict) -> dict:
     stt = result.get("stt")
     if not isinstance(stt, dict) or stt.get("provider") != "elevenlabs":
         raise ValueError("Migration requires explicit stt.provider: elevenlabs")
+    if truthy(stt.get("streaming", False)):
+        raise ValueError("stt.streaming is enabled: this provider has no live partial transcripts. "
+                         "Migration refused; keep the streaming provider or deliberately disable "
+                         "streaming in the source copy before migration.")
+    if not accept_gateway_relay:
+        raise ValueError("Desktop audio will pass through the Hermes gateway instead of going "
+                         "directly to ElevenLabs. Use --accept-gateway-relay only if this is intended.")
     if NAME in stt:
         raise ValueError("Destination STT stanza already exists; reconcile it manually")
     providers = stt.get("providers") or {}
@@ -39,11 +45,12 @@ def migrated_config(original: dict) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError("stt.elevenlabs must be a mapping")
     # Hermes's plugin dispatcher reads model/language, not the built-in aliases.
-    cfg["model"] = cfg.get("model_id", "scribe_v2")
+    cfg["model"] = cfg.pop("model_id", os.getenv("STT_ELEVENLABS_MODEL", "scribe_v2"))
     if not isinstance(cfg["model"], str) or not cfg["model"].strip():
         raise ValueError("Set a non-empty ElevenLabs model_id before migrating")
     language = next((v.strip() for v in (cfg.get("language"), cfg.get("language_code"))
                      if isinstance(v, str) and v.strip()), None)
+    cfg.pop("language_code", None)
     if language:
         cfg["language"] = language
     stt[NAME] = cfg
@@ -62,9 +69,22 @@ def migrated_config(original: dict) -> dict:
     return result
 
 
+def write_candidate(yaml: YAML, candidate: dict, output: Path) -> None:
+    """Publish a complete 0600 candidate without replacing any existing entry."""
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=output.parent,
+                            prefix=f".{output.name}.") as staged:
+        yaml.dump(candidate, staged)
+        staged.flush()
+        os.fsync(staged.fileno())
+        # Same-directory hard link is atomic and refuses files and symlinks alike.
+        os.link(staged.name, output)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True, help="Absolute source config path")
+    parser.add_argument("--accept-gateway-relay", action="store_true",
+                        help="Deliberately accept Desktop audio passing through the Hermes gateway")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--dry-run", action="store_true", help="Preview only (the default)")
     group.add_argument("--output", type=Path, help="Absolute NEW candidate path, never overwritten")
@@ -72,23 +92,19 @@ def main(argv=None) -> int:
     if not args.config.is_absolute() or (args.output and not args.output.is_absolute()):
         parser.error("All paths must be absolute")
     try:
+        require_host_capabilities()
         yaml = YAML()
         yaml.preserve_quotes = True
         with args.config.open(encoding="utf-8") as stream:
-            candidate = migrated_config(yaml.load(stream))
+            candidate = migrated_config(yaml.load(stream), accept_gateway_relay=args.accept_gateway_relay)
         if args.output:
-            # Exclusive create protects the input, existing files, and symlink targets.
-            fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                yaml.dump(candidate, stream)
+            write_candidate(yaml, candidate, args.output)
             print(f"Candidate written: {args.output}")
         else:
             print("Dry run: source unchanged; no candidate written.")
-        print("Select stt.provider: elevenlabs-scribe; enable plugin: elevenlabs-scribe.")
-        print("All existing Scribe settings are copied; model_id/language_code gain dispatcher aliases.")
-        print("The original elevenlabs stanza and all unrelated settings remain intact.")
-        for caveat in CAVEATS:
-            print(f"Compatibility: {caveat}")
+        print("Would select elevenlabs-scribe and enable it; model/language aliases are normalized.")
+        print("Desktop audio uses the gateway relay. Source and rollback stanza stay unchanged.")
+        print("Next: review the candidate and coordinate host, plugin and config cutover together.")
         return 0
     except YAMLError:
         parser.error("Cannot parse YAML configuration")

@@ -31,10 +31,11 @@ def legacy_config():
 def test_migration_preserves_all_fields_and_does_not_mutate_source():
     original = legacy_config()
     before = deepcopy(original)
-    candidate = migration.migrated_config(original)
+    candidate = migration.migrated_config(original, accept_gateway_relay=True)
     assert original == before
     assert candidate["stt"]["elevenlabs"] == before["stt"]["elevenlabs"]
-    assert candidate["stt"][NAME] == {**before["stt"]["elevenlabs"], "model": "scribe_v2", "language": "eng"}
+    expected = {k: v for k, v in before["stt"]["elevenlabs"].items() if k not in {"model_id", "language_code"}}
+    assert candidate["stt"][NAME] == {**expected, "model": "scribe_v2", "language": "eng"}
     assert candidate["stt"]["provider"] == NAME
     assert candidate["plugins"]["enabled"] == ["another-plugin", NAME]
     assert candidate["memory"] == before["memory"]
@@ -44,7 +45,7 @@ def test_migration_preserves_all_fields_and_does_not_mutate_source():
 def test_migrated_model_and_language_override_global_settings(installed):
     legacy = legacy_config()
     legacy["stt"]["elevenlabs"].update(keyterms_file="", base_url=installed.stub.url)
-    migrated = migration.migrated_config(legacy)
+    migrated = migration.migrated_config(legacy, accept_gateway_relay=True)
     installed.cfg.clear()
     installed.cfg.update(migrated)
     assert installed.dispatch()["success"]
@@ -55,7 +56,7 @@ def test_migrated_model_and_language_override_global_settings(installed):
     assert form["keyterms"] == "Quartz"
 
 
-def test_cli_dry_run_and_new_candidate_keep_input_comments_and_permissions(tmp_path):
+def test_cli_dry_run_and_new_candidate_keep_input_comments_and_permissions(tmp_path, hermes_source):
     source = tmp_path / "source.yaml"
     source.write_text("# keep this comment\nstt:\n  provider: elevenlabs\n  elevenlabs:\n"
                       "    model_id: 'scribe_v2'\n    keyterms: [Quartz]\n    no_verbatim: true\n",
@@ -64,11 +65,11 @@ def test_cli_dry_run_and_new_candidate_keep_input_comments_and_permissions(tmp_p
     home = tmp_path / "home"
     home.mkdir()
     env = {**os.environ, "HOME": str(home), "HERMES_HOME": str(home / ".hermes"),
-           "PYTHONPATH": str(__import__("pathlib").Path.cwd())}
-    cmd = [sys.executable, str(PLUGIN / "migrate.py"), "--config", str(source)]
+           "PYTHONPATH": str(hermes_source)}
+    cmd = [sys.executable, str(PLUGIN / "migrate.py"), "--config", str(source), "--accept-gateway-relay"]
     dry = subprocess.run([*cmd, "--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0, dry.stderr
-    assert "Dry run" in dry.stdout and "capabilities verified" in dry.stdout
+    assert "Dry run" in dry.stdout and "gateway relay" in dry.stdout
     assert "Quartz" not in dry.stdout
     candidate = tmp_path / "candidate.yaml"
     written = subprocess.run([*cmd, "--output", str(candidate)], env=env, capture_output=True, text=True)
@@ -96,4 +97,4 @@ def test_migration_refuses_ambiguous_or_conflicting_config(change):
     cfg = legacy_config()
     change(cfg)
     with pytest.raises(ValueError):
-        migration.migrated_config(cfg)
+        migration.migrated_config(cfg, accept_gateway_relay=True)

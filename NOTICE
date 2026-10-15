@@ -2,10 +2,11 @@ This project contains code adapted from Hermes Agent:
 https://github.com/NousResearch/hermes-agent
 Copyright (c) 2025 Nous Research. Licensed under the MIT License.
 
-The REST response normalization and request/error conventions derive from Hermes
-v0.22.2 (d923a5eb48). The Scribe keyterm/form controls derive from an MIT-licensed
-owned Hermes extension. Extraction, native provider registration, migration,
-and independent offline tests are distributed under the same MIT License.
+REST response normalization and request/error conventions derive from Hermes
+v0.22.2 (d923a5eb48). The Scribe form and file-backed keyterm extension was authored
+by Thomas Marcelis, commit 821faf3fb0a68a64df660272aa23096c03680fdd,
+retained in the MIT-licensed Hermes fork baseline ec745077f4bbd8086f593d590ec29d376939cdf7.
+Copyright (c) 2026 Thomas Marcelis for that extension and this standalone integration.
 
 ElevenLabs and Hermes are names of their respective products. This independent
 integration claims no sponsorship or endorsement.

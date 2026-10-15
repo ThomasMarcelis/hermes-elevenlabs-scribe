@@ -1,6 +1,5 @@
 """Offline contracts exercised through the installed provider and Hermes dispatch."""
 
-import json
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -10,7 +9,7 @@ import requests
 from conftest import NAME, fields
 
 
-def test_installed_discovery_exact_multipart_and_builtin_unchanged(installed, record_property):
+def test_installed_discovery_exact_multipart_and_builtin_unchanged(installed):
     from agent.transcription_registry import get_provider
     from hermes_cli.plugins import get_plugin_manager
     from tools import transcription_cloud
@@ -42,11 +41,6 @@ def test_installed_discovery_exact_multipart_and_builtin_unchanged(installed, re
         ("language_code", "eng")]
     assert call["parts"][-1] == ("file", "synthetic.wav", installed.audio.read_bytes())
     assert call["raw"].count(b'name="keyterms"') == 4
-    record_property("installed_module", module.__file__)
-    record_property("core_module", transcription_cloud.__file__)
-    record_property("wire_fields", json.dumps(fields(call), ensure_ascii=False))
-    record_property("wire_query", urlsplit(call["path"]).query)
-    record_property("audio_bytes", len(installed.audio.read_bytes()))
     # Same process, same installed plugin, real built-in route: only release fields.
     installed.cfg["stt"]["provider"] = "elevenlabs"
     installed.cfg["stt"]["elevenlabs"] = {**installed.settings, "model_id": "scribe_v2",

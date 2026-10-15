@@ -1,4 +1,4 @@
-"""Native Hermes transcription provider; no core modifications or import-time I/O."""
+"""Register the elevenlabs-scribe transcription provider."""
 
 
 def register(ctx):
